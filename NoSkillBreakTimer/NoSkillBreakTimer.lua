@@ -115,6 +115,19 @@ resizer:SetScript("OnMouseUp", function()
 end)
 
 ---------------------------------------------------------------------
+-- Enabled memes helper
+---------------------------------------------------------------------
+local function GetEnabledMemes()
+    local enabled = {}
+    for _, name in ipairs(MEME_FILES) do
+        if NoSkillBreakTimerDB.memes[name] ~= false then
+            enabled[#enabled + 1] = name
+        end
+    end
+    return enabled
+end
+
+---------------------------------------------------------------------
 -- State
 ---------------------------------------------------------------------
 local isRunning = false
@@ -126,16 +139,21 @@ local lastMemeIndex = 0
 -- Meme selection
 ---------------------------------------------------------------------
 local function ShowRandomMeme()
+    local enabled = GetEnabledMemes()
+    if #enabled == 0 then
+        memeTexture:SetTexture(nil)
+        return
+    end
     local idx
-    if #MEME_FILES == 1 then
+    if #enabled == 1 then
         idx = 1
     else
         repeat
-            idx = math.random(1, #MEME_FILES)
+            idx = math.random(1, #enabled)
         until idx ~= lastMemeIndex
     end
     lastMemeIndex = idx
-    memeTexture:SetTexture(MEME_PATH .. MEME_FILES[idx])
+    memeTexture:SetTexture(MEME_PATH .. enabled[idx])
 end
 
 ---------------------------------------------------------------------
@@ -178,6 +196,18 @@ local function ToggleTest()
     end
 end
 
+local function ResetPosition()
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER")
+    frame:SetSize(512, 560)
+    NoSkillBreakTimerDB.point = nil
+    NoSkillBreakTimerDB.relPoint = nil
+    NoSkillBreakTimerDB.x = nil
+    NoSkillBreakTimerDB.y = nil
+    NoSkillBreakTimerDB.width = nil
+    NoSkillBreakTimerDB.height = nil
+end
+
 ---------------------------------------------------------------------
 -- HOOK 1: DBM Callback API (the official public API)
 -- DBM fires "DBM_TimerStart" with simpleType "break"
@@ -189,7 +219,6 @@ local function HookDBMCallbacks()
     if DBM.RegisterCallback then
         local callbackHandler = {}
         DBM:RegisterCallback("DBM_TimerStart", function(event, id, msg, timer, icon, timerType, spellId, dbmType, ...)
-            -- dbmType/simpleType for break timers is "break"
             if timerType == "break" or (msg and type(msg) == "string" and msg:lower():find("break")) then
                     StartBreak(timer, "DBM callback")
             end
@@ -202,7 +231,6 @@ local function HookDBMCallbacks()
         if DBM[funcName] then
             hooksecurefunc(DBM, funcName, function(self, timer, ...)
                 if timer and timer > 0 then
-                    -- DBM break functions receive minutes; convert to seconds
                     local seconds = timer <= 60 and timer * 60 or timer
                     StartBreak(seconds, "DBM " .. funcName)
                 end
@@ -222,7 +250,6 @@ addonListener:RegisterEvent("CHAT_MSG_ADDON")
 addonListener:SetScript("OnEvent", function(self, event, prefix, msg, channel, sender)
     if prefix ~= "D4" and prefix ~= "D5" then return end
 
-    -- Break timer start: BT\t<minutes>
     local btTime = msg:match("^BT\t(%d+)")
     if btTime then
         local minutes = tonumber(btTime)
@@ -232,7 +259,6 @@ addonListener:SetScript("OnEvent", function(self, event, prefix, msg, channel, s
         return
     end
 
-    -- Break timer cancel
     if msg:match("^BTC") and isRunning then
         StopBreak()
     end
@@ -240,27 +266,21 @@ end)
 
 ---------------------------------------------------------------------
 -- HOOK 3: BigWigs break bar via callback system
--- BigWigs_StartBar args: event, module, key, text, time, icon
--- The "text" contains the display string (e.g. "Break"), key may be
--- numeric or a string. Check both.
 ---------------------------------------------------------------------
 local bigWigsHooked = false
 
 local function HookBigWigs()
     if bigWigsHooked then return end
 
-    -- Try BigWigsLoader first (available early), then BigWigs global
     local registrar = BigWigsLoader or BigWigs
     if not registrar or not registrar.RegisterMessage then return end
 
     local plugin = {}
     registrar.RegisterMessage(plugin, "BigWigs_StartBar", function(event, mod, key, text, time, icon)
         local isBreak = false
-        -- Check key
         if key and type(key) == "string" and key:lower():find("break") then
             isBreak = true
         end
-        -- Check display text
         if text and type(text) == "string" and text:lower():find("break") then
             isBreak = true
         end
@@ -284,13 +304,10 @@ end
 
 ---------------------------------------------------------------------
 -- HOOK 4: Blizzard countdown (C_PartyInfo.DoCountdown)
--- DBM uses this internally for break timers in Midnight
 ---------------------------------------------------------------------
 local countdownListener = CreateFrame("Frame")
 countdownListener:RegisterEvent("START_TIMER")
 countdownListener:SetScript("OnEvent", function(self, event, timerType, timeRemaining, totalTime)
-    -- timerType 2 = party countdown
-    -- Trigger on any countdown >= 60s as a likely break timer
     if totalTime and totalTime >= 60 then
         StartBreak(totalTime, "Blizzard countdown")
     end
@@ -298,13 +315,11 @@ end)
 
 ---------------------------------------------------------------------
 -- HOOK 5: Chat message detection (fallback)
--- Catches DBM/BigWigs break announcements in raid warning
 ---------------------------------------------------------------------
 local chatListener = CreateFrame("Frame")
 chatListener:RegisterEvent("CHAT_MSG_RAID_WARNING")
 chatListener:SetScript("OnEvent", function(self, event, msg, sender)
     if msg then
-        -- DBM break start messages like "Break time started" or "Break Starting Now"
         local breakMin = msg:match("[Bb]reak.-(%d+)%s*min")
         if breakMin then
             local minutes = tonumber(breakMin)
@@ -316,12 +331,47 @@ chatListener:SetScript("OnEvent", function(self, event, msg, sender)
 end)
 
 ---------------------------------------------------------------------
+-- Preview frame (shared popup for previewing memes in options)
+---------------------------------------------------------------------
+local previewFrame = CreateFrame("Frame", "NSBT_PreviewFrame", UIParent, "BackdropTemplate")
+previewFrame:SetSize(300, 340)
+previewFrame:SetPoint("CENTER")
+previewFrame:SetFrameStrata("TOOLTIP")
+previewFrame:SetMovable(true)
+previewFrame:EnableMouse(true)
+previewFrame:RegisterForDrag("LeftButton")
+previewFrame:SetScript("OnDragStart", previewFrame.StartMoving)
+previewFrame:SetScript("OnDragStop", previewFrame.StopMovingOrSizing)
+previewFrame:Hide()
+
+previewFrame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 8, right = 8, top = 8, bottom = 8 },
+})
+
+local previewClose = CreateFrame("Button", nil, previewFrame, "UIPanelCloseButton")
+previewClose:SetPoint("TOPRIGHT", previewFrame, "TOPRIGHT", -4, -4)
+previewClose:SetScript("OnClick", function() previewFrame:Hide() end)
+
+local previewTitle = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+previewTitle:SetPoint("TOP", previewFrame, "TOP", 0, -12)
+
+local previewTexture = previewFrame:CreateTexture(nil, "ARTWORK")
+previewTexture:SetPoint("TOP", previewTitle, "BOTTOM", 0, -8)
+previewTexture:SetPoint("LEFT", previewFrame, "LEFT", 16, 0)
+previewTexture:SetPoint("RIGHT", previewFrame, "RIGHT", -16, 0)
+previewTexture:SetPoint("BOTTOM", previewFrame, "BOTTOM", 0, 16)
+
+---------------------------------------------------------------------
 -- Options panel
 ---------------------------------------------------------------------
 local function CreateOptionsPanel()
     local panel = CreateFrame("Frame")
-    panel:SetSize(300, 200)
+    panel:SetSize(600, 400)
 
+    -- Title
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
     title:SetText("No Skill Break Timer")
@@ -330,8 +380,9 @@ local function CreateOptionsPanel()
     desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     desc:SetText("Shows a random meme during DBM/BigWigs break timers.")
 
+    -- Lock checkbox
     local lockCheck = CreateFrame("CheckButton", "NSBT_LockCheck", panel, "InterfaceOptionsCheckButtonTemplate")
-    lockCheck:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", -2, -16)
+    lockCheck:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", -2, -12)
     lockCheck.Text:SetText("Lock frame (prevent moving and resizing)")
     lockCheck:SetChecked(NoSkillBreakTimerDB and NoSkillBreakTimerDB.locked or false)
     lockCheck:SetScript("OnClick", function(self)
@@ -339,21 +390,106 @@ local function CreateOptionsPanel()
         ApplyLockState()
     end)
 
+    -- Test button
     local testBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    testBtn:SetSize(140, 24)
-    testBtn:SetPoint("TOPLEFT", lockCheck, "BOTTOMLEFT", 2, -16)
+    testBtn:SetSize(120, 24)
+    testBtn:SetPoint("TOPLEFT", lockCheck, "BOTTOMLEFT", 2, -8)
     testBtn:SetText("Toggle Test")
     testBtn:SetScript("OnClick", function()
         ToggleTest()
     end)
 
-    local testDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    testDesc:SetPoint("LEFT", testBtn, "RIGHT", 8, 0)
-    testDesc:SetText("Preview the frame to adjust position/size")
+    local resetBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    resetBtn:SetSize(120, 24)
+    resetBtn:SetPoint("LEFT", testBtn, "RIGHT", 8, 0)
+    resetBtn:SetText("Reset Position")
+    resetBtn:SetScript("OnClick", function()
+        ResetPosition()
+    end)
 
-    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", testBtn, "BOTTOMLEFT", 0, -12)
-    hint:SetText("Unlock > Test > drag to move, corner grip to resize > Lock")
+    local testDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    testDesc:SetPoint("LEFT", resetBtn, "RIGHT", 8, 0)
+    testDesc:SetText("Unlock > Test > drag/resize > Lock")
+
+    -- Meme list header
+    local memeHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    memeHeader:SetPoint("TOPLEFT", testBtn, "BOTTOMLEFT", 0, -16)
+    memeHeader:SetText("Memes")
+
+    local memeDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    memeDesc:SetPoint("LEFT", memeHeader, "RIGHT", 8, 0)
+    memeDesc:SetText("(uncheck to disable, click Preview to see)")
+
+    -- Scroll frame for meme list
+    local scrollFrame = CreateFrame("ScrollFrame", "NSBT_MemeScroll", panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", memeHeader, "BOTTOMLEFT", 0, -8)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 10)
+
+    local scrollChild = CreateFrame("Frame")
+    scrollChild:SetSize(1, 1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    -- Build meme rows
+    local ROW_HEIGHT = 26
+    local PREVIEW_X = 150 -- fixed x position for all Preview buttons
+    local rows = {}
+
+    for i, memeName in ipairs(MEME_FILES) do
+        local row = CreateFrame("Frame", nil, scrollChild)
+        row:SetSize(400, ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
+
+        -- Checkbox
+        local cb = CreateFrame("CheckButton", "NSBT_Meme_" .. memeName, row, "InterfaceOptionsCheckButtonTemplate")
+        cb:SetPoint("LEFT", row, "LEFT", 0, 0)
+        cb.Text:SetText(memeName)
+        cb:SetChecked(NoSkillBreakTimerDB.memes[memeName] ~= false)
+        cb:SetScript("OnClick", function(self)
+            NoSkillBreakTimerDB.memes[memeName] = self:GetChecked()
+        end)
+
+        -- Preview button (fixed position)
+        local previewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        previewBtn:SetSize(64, 20)
+        previewBtn:SetPoint("LEFT", row, "LEFT", PREVIEW_X, 0)
+        previewBtn:SetText("Preview")
+        previewBtn:SetScript("OnClick", function()
+            previewTitle:SetText(memeName)
+            previewTexture:SetTexture(MEME_PATH .. memeName)
+            previewFrame:Show()
+        end)
+
+        rows[i] = row
+    end
+
+    -- Set scroll child height
+    scrollChild:SetHeight(#MEME_FILES * ROW_HEIGHT)
+    scrollChild:SetWidth(400)
+
+    -- Select All / Deselect All buttons
+    local selectAllBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    selectAllBtn:SetSize(90, 20)
+    selectAllBtn:SetPoint("LEFT", memeDesc, "RIGHT", 12, 0)
+    selectAllBtn:SetText("Select All")
+    selectAllBtn:SetScript("OnClick", function()
+        for _, memeName in ipairs(MEME_FILES) do
+            NoSkillBreakTimerDB.memes[memeName] = true
+            local cb = _G["NSBT_Meme_" .. memeName]
+            if cb then cb:SetChecked(true) end
+        end
+    end)
+
+    local deselectAllBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    deselectAllBtn:SetSize(100, 20)
+    deselectAllBtn:SetPoint("LEFT", selectAllBtn, "RIGHT", 4, 0)
+    deselectAllBtn:SetText("Deselect All")
+    deselectAllBtn:SetScript("OnClick", function()
+        for _, memeName in ipairs(MEME_FILES) do
+            NoSkillBreakTimerDB.memes[memeName] = false
+            local cb = _G["NSBT_Meme_" .. memeName]
+            if cb then cb:SetChecked(false) end
+        end
+    end)
 
     local category = Settings.RegisterCanvasLayoutCategory(panel, "No Skill Break Timer")
     Settings.RegisterAddOnCategory(category)
@@ -379,6 +515,8 @@ SlashCmdList["NSBT"] = function(msg)
         end
     elseif cmd == "test" then
         ToggleTest()
+    elseif cmd == "reset" then
+        ResetPosition()
     else
         if settingsCategory then
             Settings.OpenToCategory(settingsCategory:GetID())
@@ -393,11 +531,22 @@ local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self, event)
     if not NoSkillBreakTimerDB then
-        NoSkillBreakTimerDB = { locked = true }
+        NoSkillBreakTimerDB = { locked = true, memes = {} }
     end
     if NoSkillBreakTimerDB.locked == nil then
         NoSkillBreakTimerDB.locked = true
     end
+    if not NoSkillBreakTimerDB.memes then
+        NoSkillBreakTimerDB.memes = {}
+    end
+
+    -- Default all memes to enabled
+    for _, name in ipairs(MEME_FILES) do
+        if NoSkillBreakTimerDB.memes[name] == nil then
+            NoSkillBreakTimerDB.memes[name] = true
+        end
+    end
+
     local db = NoSkillBreakTimerDB
 
     if db.width and db.height then
@@ -410,15 +559,12 @@ initFrame:SetScript("OnEvent", function(self, event)
 
     ApplyLockState()
 
-    -- Register addon message prefixes
     C_ChatInfo.RegisterAddonMessagePrefix("D4")
     C_ChatInfo.RegisterAddonMessagePrefix("D5")
 
-    -- Hook DBM and BigWigs
     HookDBMCallbacks()
     HookBigWigs()
 
-    -- If DBM or BigWigs loads later, hook them then
     if not DBM or not bigWigsHooked then
         local lateLoader = CreateFrame("Frame")
         lateLoader:RegisterEvent("ADDON_LOADED")

@@ -4,6 +4,10 @@ A World of Warcraft addon that displays a random meme image whenever a break tim
 
 ## Installation
 
+### WoWUp
+Paste the repo URL into WoWUp's **Get Addons** search to install and receive automatic updates.
+
+### Manual
 1. Download or clone this repo
 2. Copy the `NoSkillBreakTimer` folder into your WoW addons directory:
    ```
@@ -27,7 +31,7 @@ A World of Warcraft addon that displays a random meme image whenever a break tim
 
 ## How It Works
 
-When someone in your group triggers a break timer via `/dbm break`, BigWigs, or Blizzard's countdown (60s+), a random meme pops up with a "BREAK TIME" header. The meme stays up for the duration of the break and auto-hides when it ends.
+When someone in your group triggers a break timer via `/break`, `/dbm break`, or Blizzard's countdown (60s+), a random meme pops up with a "BREAK TIME" header. The meme stays up for the duration of the break and auto-hides when it ends.
 
 ## Slash Commands
 
@@ -36,6 +40,7 @@ When someone in your group triggers a break timer via `/dbm break`, BigWigs, or 
 | `/nsbt` | Open the addon options panel |
 | `/nsbt test` | Toggle the meme frame on/off for positioning |
 | `/nsbt lock` | Toggle frame lock (prevent moving/resizing) |
+| `/nsbt reset` | Reset frame position and size to default |
 
 ## Options
 
@@ -43,13 +48,15 @@ Found under **ESC > Options > AddOns > No Skill Break Timer**:
 
 - **Lock/Unlock** — When unlocked, drag the frame to reposition it and use the grip in the bottom-right corner to resize. Lock it when you're happy with the placement.
 - **Toggle Test** — Shows the meme frame so you can adjust position and size without needing an actual break timer. Click again to hide.
+- **Reset Position** — Resets the frame to default size and center of screen if you lose it.
+- **Meme List** — Enable or disable individual memes with checkboxes. Only enabled memes will be shown during breaks. Use the Preview button to see each meme. Select All / Deselect All buttons for quick toggling.
 
-Position and size are saved between sessions.
+All settings are account-wide and persist between sessions.
 
 ## Supported Break Timer Sources
 
-- **DBM** — `/dbm break <minutes>` (direct API hook + addon message listener)
-- **BigWigs** — Break bar callbacks
+- **BigWigs** — `/break <minutes>`
+- **DBM** — `/break <minutes>` or `/dbm break <minutes>`
 - **Blizzard Countdown** — `C_PartyInfo.DoCountdown` timers of 60 seconds or longer
 
 ## Compatibility
