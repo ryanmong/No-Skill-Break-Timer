@@ -1,6 +1,6 @@
 # No Skill Break Timer
 
-Displays a random meme image whenever a break timer is triggered through DBM, BigWigs, or Blizzard's built-in countdown. Built for WoW Midnight (12.0.1).
+A World of Warcraft addon that displays a random meme image whenever a break timer is triggered through DBM, BigWigs, or Blizzard's built-in countdown. Built for WoW Midnight (12.0.1).
 
 ## Installation
 
@@ -9,26 +9,21 @@ Displays a random meme image whenever a break timer is triggered through DBM, Bi
    ```
    World of Warcraft/_retail_/Interface/AddOns/
    ```
-3. Copy the `Memes` folder into your WoW Interface directory:
-   ```
-   World of Warcraft/_retail_/Interface/
-   ```
    Your folder structure should look like:
    ```
    World of Warcraft/
    └── _retail_/
        └── Interface/
-           ├── AddOns/
-           │   └── NoSkillBreakTimer/
-           │       ├── NoSkillBreakTimer.toc
-           │       └── NoSkillBreakTimer.lua
-           └── Memes/
-               ├── Bingo1.tga
-               ├── Cyc1.tga
-               ├── Elijah1.tga
-               └── ... (etc)
+           └── AddOns/
+               └── NoSkillBreakTimer/
+                   ├── NoSkillBreakTimer.toc
+                   ├── NoSkillBreakTimer.lua
+                   └── Memes/
+                       ├── Bingo1.tga
+                       ├── Cyc1.tga
+                       └── ... (etc)
    ```
-4. Restart WoW or `/reload` if already in-game
+3. Restart WoW or `/reload` if already in-game
 
 ## How It Works
 
